@@ -1,174 +1,181 @@
+use regex::Regex;
 use std::convert::TryFrom;
 
 #[allow(dead_code)]
-enum Message<'a> {
+#[derive(Debug)]
+pub enum Message<'a> {
     Away {
-        message: Option<&'a [u8]>,
+        message: Option<&'a str>,
     },
     Error {
-        message: &'a [u8],
+        message: &'a str,
     },
     Info {
-        server: Option<&'a [u8]>,
+        server: Option<&'a str>,
     },
     Join {
-        channels: Vec<&'a [u8]>,
-        keys: Option<Vec<&'a [u8]>>,
+        channels: Vec<&'a str>,
+        keys: Option<Vec<&'a str>>,
     },
     Kick {
-        channel: &'a [u8],
-        user: &'a [u8],
-        comment: Option<&'a [u8]>,
+        channel: &'a str,
+        user: &'a str,
+        comment: Option<&'a str>,
     },
     Kill {
-        nickname: &'a [u8],
-        comment: &'a [u8],
+        nickname: &'a str,
+        comment: &'a str,
     },
     List {
-        channels: Option<Vec<&'a [u8]>>,
-        server: &'a [u8],
+        channels: Option<Vec<&'a str>>,
+        server: &'a str,
     },
     Names {
-        channels: Vec<&'a [u8]>,
+        channels: Vec<&'a str>,
     },
     Nick {
-        nickname: &'a [u8],
+        nickname: &'a str,
     },
     Notice {
-        nickname: &'a [u8],
-        text: &'a [u8],
+        nickname: &'a str,
+        text: &'a str,
     },
     Part {
-        channels: Vec<&'a [u8]>,
+        channels: Vec<&'a str>,
     },
     Pass {
-        password: &'a [u8],
+        password: &'a str,
     },
     Ping {
-        server1: &'a [u8],
-        server2: Option<&'a [u8]>,
+        server1: &'a str,
+        server2: Option<&'a str>,
     },
     Pong {
-        daemon: &'a [u8],
-        daemon2: Option<&'a [u8]>,
+        daemon: &'a str,
+        daemon2: Option<&'a str>,
     },
     Privmsg {
-        receivers: Vec<&'a [u8]>,
-        message: &'a [u8],
+        receivers: Vec<&'a str>,
+        message: &'a str,
     },
     Quit {
-        message: Option<&'a [u8]>,
+        message: Option<&'a str>,
     },
     Stats {
-        query: Option<&'a [u8]>,
-        server: Option<&'a [u8]>,
+        query: Option<&'a str>,
+        server: Option<&'a str>,
     },
     Time {
-        server: Option<&'a [u8]>,
+        server: Option<&'a str>,
     },
     Topic {
-        channel: &'a [u8],
-        topic: &'a [u8],
+        channel: &'a str,
+        topic: &'a str,
     },
     User {
-        username: &'a [u8],
-        hostname: &'a [u8],
-        servername: &'a [u8],
-        realname: &'a [u8],
+        username: &'a str,
+        hostname: &'a str,
+        servername: &'a str,
+        realname: &'a str,
     },
     Users {
-        server: Option<&'a [u8]>,
+        server: Option<&'a str>,
     },
     Version {
-        server: Option<&'a [u8]>,
+        server: Option<&'a str>,
     },
     Whois {
-        server: Option<&'a [u8]>,
-        nickmask: Vec<&'a [u8]>,
+        server: Option<&'a str>,
+        nickmask: Vec<&'a str>,
     },
     Whowas {
-        nickname: &'a [u8],
-        count: Option<&'a [u8]>,
-        server: Option<&'a [u8]>,
+        nickname: &'a str,
+        count: Option<&'a str>,
+        server: Option<&'a str>,
     },
 }
 
-fn split_one<'a>(a: &'a [u8], v: u8) -> (Option<&'a [u8]>, Option<&'a [u8]>) {
-    let mut split_v = a.splitn(2, |&x| x == v);
-    let left = split_v.next();
-    let right = split_v.next();
-    (left, right)
-}
-
-fn split_on_crlf<'a>(a: &'a [u8]) -> &'a [u8] {
-    let mut split_v = a.splitn(2, |&x| x == '\n' as u8 || x == '\n' as u8);
-    split_v.next().unwrap();
-}
-
-impl<'a> TryFrom<&'a [u8]> for Message<'a> {
+impl<'a> TryFrom<&'a str> for Message<'a> {
     type Error = ();
-    fn try_from(bytes: &'a [u8]) -> Result<Self, <Message<'a> as TryFrom<&'a [u8]>>::Error> {
-        let bytes = split_on_crlf(bytes);
-        let (command, right_side) = split_one(bytes, ' ' as u8);
-        let command = command.unwrap();
-        match command {
-            b"AWAY" => {
-                if let Some(r) = right_side {
-                    let (_, message) = split_one(r, ':' as u8);
-                    Ok(Message::Away { message })
-                } else {
-                    Ok(Message::Away { message: None })
-                }
-            }
-            b"INFO" => Ok(Message::Info { server: None }),
-            b"NICK" => {
-                if let Some(r) = right_side {
-                    let (n, right_side) = split_one(r, ' ' as u8);
-                    if let Some(nickname) = n {
-                        if !nickname.contains(&('' as u8)) {
-                            return Ok(Message::Nick { nickname });
-                        }
-                    }
-                }
-                Err(())
-            }
-            b"KICK" => Err(()),
-            b"KILL" => Err(()),
-            b"VERSION" => Err(()),
-            b"PASS" => {
-                if let Some(password) = right_side {
-                    Ok(Message::Pass { password })
-                } else {
-                    Err(())
-                }
-            }
-            b"USER" => Err(()),
-            b"USERS" => Err(()),
-            b"QUIT" => Err(()),
-            b"JOIN" => Err(()),
-            b"PART" => Err(()),
-            b"STATS" => Err(()),
-            b"TOPIC" => Err(()),
-            b"LIST" => Err(()),
-            b"WHOIS" => Err(()),
-            b"WHOWAS" => Err(()),
-            b"PING" => Err(),
-            b"PONG" => Err(()),
-            b"ERROR" => Err(()),
+    fn try_from(bytes: &'a str) -> Result<Self, <Message<'a> as TryFrom<&'a str>>::Error> {
+        let re = Regex::new(r"^AWAY :(.*)?\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Away {
+                message: caps.get(1).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^NICK ([[:alpha:]0-9])\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Nick { nickname: caps.get(1).unwrap().as_str() });
+        }
+        let re = Regex::new(r"^INFO (.*)?\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Info {
+                server: caps.get(1).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^PASS (.*)\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Pass { password: caps.get(1).unwrap().as_str() });
+        }
+        let re = Regex::new(r"^KICK (.*) (.*) (.*)?\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Kick {
+                channel: caps.get(1).unwrap().as_str(),
+                user: caps.get(2).unwrap().as_str(),
+                comment: caps.get(3).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^VERSION (.*)?\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Version {
+                server: caps.get(1).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^KILL (.*) (.*)\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Kill {
+                nickname: caps.get(1).unwrap().as_str(),
+                comment: caps.get(2).unwrap().as_str(),
+            });
+        }
+        let re = Regex::new(r"^PING (.*) (.*)\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Ping {
+                server1: caps.get(1).unwrap().as_str(),
+                server2: caps.get(2).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^PONG (.*) (.*)\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Pong {
+                daemon1: caps.get(1).unwrap().as_str(),
+                daemon2: caps.get(2).map(|x| x.as_str()),
+            });
+        }
+        let re = Regex::new(r"^ERROR :(.*)\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Error {
+                message: caps.get(1).unwrap().as_str(),
+            });
+        }
+        let re = Regex::new(r"^QUIT :(.*)?\r?\n?$").unwrap();
+        if let Some(caps) = re.captures(bytes) {
+            return Ok(Message::Quit {
+                message: caps.get(1).map(|x| x.as_str()),
+            });
+        }
+        match bytes {
+            "USER" => Err(()),
+            "USERS" => Err(()),
+            "JOIN" => Err(()),
+            "PART" => Err(()),
+            "STATS" => Err(()),
+            "TOPIC" => Err(()),
+            "LIST" => Err(()),
+            "WHOIS" => Err(()),
+            "WHOWAS" => Err(()),
             _ => Err(()),
         }
     }
-}
-
-#[test]
-fn test_split_one() {
-    assert_eq!((Some(b"foo".as_ref()), None), split_one(b"foo", ' ' as u8));
-    assert_eq!(
-        (Some(b"foo".as_ref()), Some(b"".as_ref())),
-        split_one(b"foo ", ' ' as u8)
-    );
-    assert_eq!(
-        (Some(b"foo".as_ref()), Some(b"bar".as_ref())),
-        split_one(b"foo bar", ' ' as u8)
-    );
 }

@@ -1,41 +1,42 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::convert::TryFrom;
+use futures::stream::StreamExt;
+use tokio_util::codec::{Framed, LinesCodec};
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use crate::messages::Message;
 
-#[derive(Debug, Clone)]
-struct Server {
+#[derive(Debug, Default, Clone)]
+pub struct Server {
     state: Arc<ServerData>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct ServerData {
     rooms: RwLock<HashMap<String, Vec<String>>>,
     users: RwLock<HashMap<String, mpsc::Sender<Vec<u8>>>>,
 }
 
-/*
 impl Server {
     pub async fn handle_conn(&self, conn: TcpStream) {
 
-        let u = UserSession::from(conn);
+        let mut u = UserSession::from(conn);
 
-        let buf = [0;512];
-        while Ok(_) = u.tcp_reader.read(&mut buf).await {
-
+        while let Some(Ok(line)) = u.tcp_reader.next().await {
+            let m = Message::try_from(line.as_str());
+            println!("{:?}", m);
         }
-
     }
 }
-*/
 
 #[derive(Debug)]
 struct UserSession {
-    tcp_reader: OwnedReadHalf,
-    tcp_writer: OwnedWriteHalf,
+    tcp_reader: futures::stream::SplitStream<Framed<TcpStream, LinesCodec>>,
+    tcp_writer: futures::stream::SplitSink<Framed<TcpStream, LinesCodec>, String>,
     server_pass: Option<String>,
     nick: Option<String>,
     user_info: Option<UserInfo>,
@@ -51,7 +52,8 @@ struct UserInfo {
 
 impl From<TcpStream> for UserSession {
     fn from(stream: TcpStream) -> Self {
-        let (tcp_reader, tcp_writer) = stream.into_split();
+        let framed_tcp = Framed::new(stream, LinesCodec::new_with_max_length(512));
+        let (tcp_writer, tcp_reader) = framed_tcp.split();
         UserSession {
             tcp_reader,
             tcp_writer,
