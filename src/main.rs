@@ -2,7 +2,6 @@ use tokio::net::TcpListener;
 
 use std::io;
 
-mod messages;
 mod server;
 
 #[tokio::main]
